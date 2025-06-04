@@ -98,18 +98,43 @@ router.post('/', async (req, res) => {
 // Get user profile
 router.get('/profile/:userId', auth, async (req, res) => {
   try {
-    const userDoc = await db.collection('users').doc(req.params.userId).get();
-    
+    const userRef = db.collection('users').doc(req.params.userId);
+    const userDoc = await userRef.get();
     if (!userDoc.exists) {
       return res.status(404).json({ error: 'User not found' });
     }
-
     const userData = userDoc.data();
     delete userData.password;
 
+    // Assign only active quests if not already assigned
+    let userQuests = userData.user_quests || [];
+    if (!Array.isArray(userQuests)) userQuests = [];
+    const questsSnapshot = await db.collection('quests').where('status', '==', 'Active').get();
+    const activeQuests = questsSnapshot.docs.map(doc => ({
+      quest_id: doc.data().quest_id,
+      title: doc.data().title,
+      description: doc.data().description,
+      type: doc.data().type,
+      reward_points: doc.data().reward_points,
+      badge_reward: doc.data().badge_reward,
+      status: doc.data().status
+    }));
+    // Add any new active quests to user_quests
+    let updated = false;
+    activeQuests.forEach(q => {
+      if (!userQuests.some(uq => uq.quest_id === q.quest_id)) {
+        userQuests.push({ ...q, progress: 0, completed: false });
+        updated = true;
+      }
+    });
+    if (updated) {
+      await userRef.update({ user_quests: userQuests });
+    }
+
     res.json({
       id: userDoc.id,
-      ...userData
+      ...userData,
+      user_quests: userQuests
     });
   } catch (error) {
     console.error('Error fetching profile:', error);

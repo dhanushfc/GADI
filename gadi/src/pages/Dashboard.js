@@ -13,6 +13,8 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [allBadges, setAllBadges] = useState([]);
   const [userBadges, setUserBadges] = useState([]);
+  const [userQuests, setUserQuests] = useState([]);
+  const [quests, setQuests] = useState([]);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
@@ -31,6 +33,7 @@ const Dashboard = () => {
           headers: { Authorization: `Bearer ${token}` }
         });
         setUserBadges(userRes.data.badges || []);
+        setUserQuests(userRes.data.user_quests || []);
         // Fetch all badges
         const badgesRes = await axios.get('http://localhost:5000/api/badges', {
           headers: { Authorization: `Bearer ${token}` }
@@ -46,6 +49,11 @@ const Dashboard = () => {
           'http://localhost:5000/api/quizzes',
           { headers: { Authorization: `Bearer ${token}` } }
         );
+        // Fetch all quests
+        const questsRes = await axios.get('http://localhost:5000/api/quests', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setQuests(questsRes.data);
         // Calculate completed quizzes (unique, passed only)
         let completed = 0;
         if (Array.isArray(progressRes.data.quiz_scores)) {
@@ -77,6 +85,20 @@ const Dashboard = () => {
     ? Math.min(100, (quizProgress.completed / quizProgress.total) * 100)
     : 0;
 
+  // Merge user progress into active quests
+  const questsWithUserProgress = quests.map(q => {
+    if (q.status === 'Active') {
+      const uq = userQuests.find(uq => uq.quest_id === q.quest_id);
+      if (uq) return { ...q, ...uq };
+    }
+    return q;
+  });
+  const groupedQuests = {
+    Active: questsWithUserProgress.filter(q => q.status === 'Active'),
+    Upcoming: questsWithUserProgress.filter(q => q.status === 'upcoming'),
+    Expired: questsWithUserProgress.filter(q => q.status === 'expired'),
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Navigation */}
@@ -97,7 +119,7 @@ const Dashboard = () => {
                 <Link to="/badges" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                   Badges
                 </Link>
-                <Link to="#" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                <Link to="/quests" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                   Quests
                 </Link>
                 <Link to="#" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
@@ -149,29 +171,40 @@ const Dashboard = () => {
         {/* Quests Section */}
         <div className="mt-8">
           <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-xl font-bold text-gray-900 mb-4">Quests</h3>
-            <div className="space-y-4">
-              <div>
-                <h4 className="text-lg font-medium text-gray-900">Complete a quiz</h4>
-                <div className="mt-2 bg-gray-200 rounded-full h-2">
-                  <div
-                    className="bg-green-600 rounded-full h-2"
-                    style={{ width: `${progressPercent}%` }}
-                  ></div>
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Your Quests</h3>
+            {Object.entries(groupedQuests).map(([status, quests]) => (
+              quests.length > 0 && (
+                <div key={status} className="mb-6">
+                  <h4 className="text-lg font-semibold mb-2 text-gray-800">{status} Quests</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    {quests.map(quest => {
+                      let icon = '';
+                      if (quest.badge_reward === 'badge_001') icon = '🏆';
+                      else if (quest.badge_reward === 'badge_002') icon = '🧠';
+                      else if (quest.badge_reward === 'badge_003') icon = '🔥';
+                      return (
+                        <div key={quest.quest_id} className={`rounded-lg shadow p-4 flex flex-col border-2 ${quest.completed ? 'border-green-500 bg-green-50' : status === 'Active' ? 'border-green-300 bg-white' : status === 'upcoming' ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300 bg-gray-100 opacity-60'}`}>
+                          <div className="flex items-center mb-2">
+                            <span className="text-lg font-bold text-gray-900 flex-1">{quest.title}</span>
+                            {icon && <span className="ml-2 text-2xl">{icon}</span>}
+                          </div>
+                          <p className="text-gray-700 text-sm mb-2">{quest.description}</p>
+                          <div className="flex items-center text-xs text-gray-500 mb-1">
+                            <span className="mr-2">Type: {quest.type}</span>
+                            <span className="mr-2">Points: <span className="font-bold text-green-700">+{quest.reward_points}</span></span>
+                            {quest.badge_reward && <span>Badge: {quest.badge_reward}</span>}
+                          </div>
+                          {quest.status === 'Active' && quest.progress !== undefined && (
+                            <span className="text-xs text-blue-600 font-semibold">Progress: {quest.progress}{quest.quest_id === 'quest_003' ? '/5' : ''}</span>
+                          )}
+                          <span className={`text-xs font-semibold ${quest.completed ? 'text-green-600' : 'text-gray-500'}`}>{quest.status === 'Active' ? (quest.completed ? 'Completed' : 'In Progress') : quest.status.charAt(0).toUpperCase() + quest.status.slice(1)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                <p className="mt-2 text-sm text-gray-600">
-                  {loading
-                    ? 'Loading...'
-                    : `${quizProgress.completed} / ${quizProgress.total} Quizzes Completed`}
-                </p>
-              </div>
-              <div className="flex items-center space-x-2 text-green-600">
-                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span className="font-medium">Doping Rules Complete</span>
-              </div>
-            </div>
+              )
+            ))}
           </div>
         </div>
 

@@ -8,6 +8,7 @@ import Modules from './pages/Modules';
 import Quiz from './pages/Quiz';
 import ModuleDetail from './pages/ModuleDetail';
 import Badges from './pages/Badges';
+import Quests from './pages/Quests';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
         <Route path="/quiz/:quizId" element={<Quiz />} />
         <Route path="/modules/:moduleId" element={<ModuleDetail />} />
         <Route path="/badges" element={<Badges />} />
+        <Route path="/quests" element={<Quests />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>

@@ -124,12 +124,41 @@ router.post('/submit/:quizId', auth, async (req, res) => {
           if (percentage === 100 && !badges.includes('badge_002')) {
             awardBadges.push('badge_002');
           }
-          transaction.update(userRef, {
+
+          // --- Quest Progress Logic ---
+          let userQuests = userData.user_quests || [];
+          if (!Array.isArray(userQuests)) userQuests = [];
+          let questsChanged = false;
+          // Quiz Master quest
+          userQuests = userQuests.map(q => {
+            if (q.quest_id === 'quest_001' && percentage === 100 && !q.completed) {
+              questsChanged = true;
+              return { ...q, completed: true, progress: 1 };
+            }
+            // Weekly Warrior quest: increment progress for each quiz completed
+            if (q.quest_id === 'quest_003' && !q.completed) {
+              const newProgress = (q.progress || 0) + 1;
+              if (newProgress >= 5) {
+                questsChanged = true;
+                return { ...q, progress: 5, completed: true };
+              } else {
+                questsChanged = true;
+                return { ...q, progress: newProgress };
+              }
+            }
+            return q;
+          });
+
+          const updateObj = {
             points: admin.firestore.FieldValue.increment(pointsEarned),
             completed_modules: moduleDocId ? admin.firestore.FieldValue.arrayUnion(moduleDocId) : admin.firestore.FieldValue.arrayUnion(quiz.module_id),
             quiz_scores: admin.firestore.FieldValue.arrayUnion(quizScoreObj),
             badges: awardBadges.length > 0 ? admin.firestore.FieldValue.arrayUnion(...awardBadges) : badges
-          });
+          };
+          if (questsChanged) {
+            updateObj.user_quests = userQuests;
+          }
+          transaction.update(userRef, updateObj);
         }
       });
     }
